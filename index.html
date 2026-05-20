@@ -1,225 +1,232 @@
-from flask import Flask, render_template_string, request
-from abc import ABC, abstractmethod
-
-app = Flask(__name__)
-
-# ==========================
-# CLASS OOP
-# ==========================
-
-class PerangkatElektronik(ABC):
-    def __init__(self, nama, daya_watt, jam_pakai_per_hari):
-        self.nama = nama
-        self.daya_watt = daya_watt
-        self.jam_pakai_per_hari = jam_pakai_per_hari
-        self.__tarif_per_kwh = 1444.70
-
-    def get_tarif_per_kwh(self):
-        return self.__tarif_per_kwh
-
-    @abstractmethod
-    def hitung_kwh_harian(self):
-        pass
-
-    def hitung_kwh_bulanan(self):
-        return self.hitung_kwh_harian() * 30
-
-    def hitung_biaya_bulanan(self):
-        return self.hitung_kwh_bulanan() * self.get_tarif_per_kwh()
-
-
-class PerangkatStatis(PerangkatElektronik):
-    def hitung_kwh_harian(self):
-        return (self.daya_watt * self.jam_pakai_per_hari) / 1000
-
-
-class PerangkatIntermiten(PerangkatElektronik):
-    def hitung_kwh_harian(self):
-        return (self.daya_watt * self.jam_pakai_per_hari * 0.95) / 1000
-
-
-class SistemAnalisisEnergi:
-    def __init__(self):
-        self.daftar_perangkat = []
-
-    def tambah_perangkat(self, perangkat):
-        self.daftar_perangkat.append(perangkat)
-
-    def total_kwh(self):
-        return sum(p.hitung_kwh_bulanan() for p in self.daftar_perangkat)
-
-    def total_biaya(self):
-        return sum(p.hitung_biaya_bulanan() for p in self.daftar_perangkat)
-
-    def perangkat_paling_boros(self):
-        if not self.daftar_perangkat:
-            return None
-        return max(self.daftar_perangkat, key=lambda p: p.hitung_biaya_bulanan())
-
-
-# ==========================
-# DATA GLOBAL
-# ==========================
-
-sistem = SistemAnalisisEnergi()
-
-
-# ==========================
-# HTML TEMPLATE
-# ==========================
-
-HTML = '''
 <!DOCTYPE html>
-<html>
+<html lang="id">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistem Analisis Energi</title>
+
     <style>
-        body {
-            font-family: Arial;
-            background-color: #f2f2f2;
+        body{
+            font-family: Arial, sans-serif;
+            background: #f2f2f2;
             padding: 20px;
         }
 
-        h1 {
+        .container{
+            max-width: 900px;
+            margin: auto;
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+
+        h1{
+            text-align: center;
             color: #333;
         }
 
-        .container {
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0px 0px 10px rgba(0,0,0,0.1);
-        }
-
-        input, select {
+        input, select{
             width: 100%;
             padding: 10px;
             margin-top: 10px;
             margin-bottom: 15px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
         }
 
-        button {
+        button{
             background: #007bff;
             color: white;
             border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
+            padding: 12px 20px;
+            border-radius: 6px;
             cursor: pointer;
+            font-size: 16px;
         }
 
-        table {
+        button:hover{
+            background: #0056b3;
+        }
+
+        table{
             width: 100%;
             border-collapse: collapse;
             margin-top: 20px;
         }
 
-        table, th, td {
+        table, th, td{
             border: 1px solid #ccc;
         }
 
-        th, td {
+        th{
+            background: #007bff;
+            color: white;
+        }
+
+        th, td{
             padding: 10px;
             text-align: center;
         }
 
-        .hasil {
+        .hasil{
             margin-top: 20px;
-            background: #eaf7ea;
+            background: #e8f5e9;
             padding: 15px;
             border-radius: 10px;
         }
+
     </style>
 </head>
 <body>
 
 <div class="container">
+
     <h1>Sistem Analisis Energi Listrik</h1>
 
-    <form method="POST">
-        <input type="text" name="nama" placeholder="Nama Perangkat" required>
+    <input type="text" id="nama" placeholder="Nama Perangkat">
 
-        <input type="number" step="0.1" name="daya" placeholder="Daya (Watt)" required>
+    <input type="number" id="daya" placeholder="Daya (Watt)">
 
-        <input type="number" step="0.1" name="jam" placeholder="Jam Pemakaian per Hari" required>
+    <input type="number" id="jam" placeholder="Jam Pemakaian per Hari">
 
-        <select name="jenis">
-            <option value="statis">Perangkat Statis</option>
-            <option value="intermiten">Perangkat Intermiten</option>
-        </select>
+    <select id="jenis">
+        <option value="statis">Perangkat Statis</option>
+        <option value="intermiten">Perangkat Intermiten</option>
+    </select>
 
-        <button type="submit">Tambah Perangkat</button>
-    </form>
+    <button onclick="tambahPerangkat()">
+        Tambah Perangkat
+    </button>
 
-    {% if perangkat_list %}
+    <table id="tabel">
+        <thead>
+            <tr>
+                <th>Nama</th>
+                <th>Daya</th>
+                <th>Jam/Hari</th>
+                <th>Jenis</th>
+                <th>kWh/Bulan</th>
+                <th>Biaya/Bulan</th>
+            </tr>
+        </thead>
 
-    <table>
-        <tr>
-            <th>Nama</th>
-            <th>Daya</th>
-            <th>Jam/Hari</th>
-            <th>kWh/Bulan</th>
-            <th>Biaya/Bulan</th>
-        </tr>
+        <tbody>
 
-        {% for p in perangkat_list %}
-        <tr>
-            <td>{{ p.nama }}</td>
-            <td>{{ p.daya_watt }} W</td>
-            <td>{{ p.jam_pakai_per_hari }} Jam</td>
-            <td>{{ '%.2f' % p.hitung_kwh_bulanan() }}</td>
-            <td>Rp {{ '{:,.0f}'.format(p.hitung_biaya_bulanan()) }}</td>
-        </tr>
-        {% endfor %}
+        </tbody>
     </table>
 
     <div class="hasil">
-        <h3>Total Konsumsi: {{ '%.2f' % total_kwh }} kWh/bulan</h3>
-        <h3>Total Tagihan: Rp {{ '{:,.0f}'.format(total_biaya) }}</h3>
+        <h3 id="totalKwh">
+            Total Konsumsi: 0 kWh/bulan
+        </h3>
 
-        {% if boros %}
-        <h3>Perangkat Paling Boros: {{ boros.nama }}</h3>
-        {% endif %}
+        <h3 id="totalBiaya">
+            Total Tagihan: Rp 0
+        </h3>
+
+        <h3 id="palingBoros">
+            Perangkat Paling Boros: -
+        </h3>
     </div>
 
-    {% endif %}
 </div>
+
+<script>
+
+    const tarif = 1444.70;
+
+    let perangkatList = [];
+
+    function tambahPerangkat(){
+
+        let nama = document.getElementById("nama").value;
+        let daya = parseFloat(document.getElementById("daya").value);
+        let jam = parseFloat(document.getElementById("jam").value);
+        let jenis = document.getElementById("jenis").value;
+
+        if(!nama || isNaN(daya) || isNaN(jam)){
+            alert("Isi semua data!");
+            return;
+        }
+
+        let kwhHarian;
+
+        if(jenis === "statis"){
+            kwhHarian = (daya * jam) / 1000;
+        } else {
+            kwhHarian = (daya * jam * 0.95) / 1000;
+        }
+
+        let kwhBulanan = kwhHarian * 30;
+        let biayaBulanan = kwhBulanan * tarif;
+
+        let perangkat = {
+            nama,
+            daya,
+            jam,
+            jenis,
+            kwhBulanan,
+            biayaBulanan
+        };
+
+        perangkatList.push(perangkat);
+
+        tampilkanData();
+
+        document.getElementById("nama").value = "";
+        document.getElementById("daya").value = "";
+        document.getElementById("jam").value = "";
+    }
+
+    function tampilkanData(){
+
+        let tbody = document.querySelector("#tabel tbody");
+
+        tbody.innerHTML = "";
+
+        let totalKwh = 0;
+        let totalBiaya = 0;
+
+        let palingBoros = null;
+
+        perangkatList.forEach((p)=>{
+
+            totalKwh += p.kwhBulanan;
+            totalBiaya += p.biayaBulanan;
+
+            if(
+                palingBoros === null ||
+                p.biayaBulanan > palingBoros.biayaBulanan
+            ){
+                palingBoros = p;
+            }
+
+            tbody.innerHTML += `
+                <tr>
+                    <td>${p.nama}</td>
+                    <td>${p.daya} W</td>
+                    <td>${p.jam} Jam</td>
+                    <td>${p.jenis}</td>
+                    <td>${p.kwhBulanan.toFixed(2)}</td>
+                    <td>Rp ${p.biayaBulanan.toLocaleString()}</td>
+                </tr>
+            `;
+        });
+
+        document.getElementById("totalKwh").innerHTML =
+            `Total Konsumsi: ${totalKwh.toFixed(2)} kWh/bulan`;
+
+        document.getElementById("totalBiaya").innerHTML =
+            `Total Tagihan: Rp ${totalBiaya.toLocaleString()}`;
+
+        document.getElementById("palingBoros").innerHTML =
+            palingBoros
+            ? `Perangkat Paling Boros: ${palingBoros.nama}`
+            : "Perangkat Paling Boros: -";
+    }
+
+</script>
 
 </body>
 </html>
-'''
-
-
-# ==========================
-# ROUTE
-# ==========================
-
-@app.route('/', methods=['GET', 'POST'])
-def index():
-    if request.method == 'POST':
-        nama = request.form['nama']
-        daya = float(request.form['daya'])
-        jam = float(request.form['jam'])
-        jenis = request.form['jenis']
-
-        if jenis == 'statis':
-            perangkat = PerangkatStatis(nama, daya, jam)
-        else:
-            perangkat = PerangkatIntermiten(nama, daya, jam)
-
-        sistem.tambah_perangkat(perangkat)
-
-    return render_template_string(
-        HTML,
-        perangkat_list=sistem.daftar_perangkat,
-        total_kwh=sistem.total_kwh(),
-        total_biaya=sistem.total_biaya(),
-        boros=sistem.perangkat_paling_boros()
-    )
-
-
-# ==========================
-# RUN APP
-# ==========================
-
-if __name__ == '__main__':
-    app.run(debug=True)
